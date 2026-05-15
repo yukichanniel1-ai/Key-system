@@ -810,7 +810,7 @@ export default function KeyVault() {
 
         {/* ── FOOTER ── */}
         <div style={{ marginTop: 28, textAlign: "center", fontSize: 10, color: D.hint, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-          KeyVault · {keys.length} keys · All data stored locally
+          KeyVault · {keys.length} keys · Synced with API
         </div>
       </div>
     </div>
