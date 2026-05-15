@@ -46,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!key) return res.status(400).json({ error: 'key is required' })
 
     try {
-      await kv.set(`bot:${key}`, JSON.stringify(data))
+      await kv.set(`bot:${key}`, data)
       return res.status(200).json({ ok: true, key })
     } catch (err) {
       console.error(err)
