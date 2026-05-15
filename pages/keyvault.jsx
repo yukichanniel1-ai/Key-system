@@ -68,18 +68,51 @@ function getKeyStatus(k) {
   return k.tier;
 }
 
+// ─── API HELPERS ──────────────────────────────────────────────────────────────
+const API_SECRET = "sk_live_keyvault_admin_2024";
+const apiHeaders = { "Content-Type": "application/json", "x-admin-secret": API_SECRET };
+
+async function fetchKeysFromAPI() {
+  try {
+    const res = await fetch("/api/keys/list", { headers: apiHeaders });
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
+
+async function generateKeyViaAPI(payload) {
+  try {
+    const res = await fetch("/api/keys/generate", { method: "POST", headers: apiHeaders, body: JSON.stringify(payload) });
+    if (res.ok || res.status === 201) return await res.json();
+  } catch {}
+  return null;
+}
+
+async function deleteKeyViaAPI(id) {
+  try {
+    await fetch(`/api/keys/delete?id=${id}`, { method: "DELETE", headers: apiHeaders });
+  } catch {}
+}
+
+async function revokeKeyViaAPI(id, revoke = true) {
+  try {
+    await fetch("/api/keys/revoke", { method: "POST", headers: apiHeaders, body: JSON.stringify({ id, revoke }) });
+  } catch {}
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function KeyVault() {
-  const [keys, setKeys] = useState(() => {
-    try {
-      const s = localStorage.getItem("kv2:keys");
-      if (s) return JSON.parse(s);
-      const seed = buildSeed();
-      localStorage.setItem("kv2:keys", JSON.stringify(seed));
-      return seed;
-    } catch { return buildSeed(); }
-  });
-  useEffect(() => { try { localStorage.setItem("kv2:keys", JSON.stringify(keys)); } catch {} }, [keys]);
+  const [keys, setKeys] = useState([]);
+  const [apiLoaded, setApiLoaded] = useState(false);
+
+  useEffect(() => {
+    fetchKeysFromAPI().then(apiKeys => {
+      if (apiKeys && apiKeys.length > 0) {
+        setKeys(apiKeys);
+      }
+      setApiLoaded(true);
+    });
+  }, []);
 
   const [tab, setTab] = useState("generate");
   const [theme, setTheme] = useState("dark");
@@ -132,31 +165,42 @@ export default function KeyVault() {
     revoked: keys.filter(k => k.revoked).length,
   };
 
-  function handleGenerate() {
+  async function handleGenerate() {
     if (loading) return;
     setLoading(true);
     const rate = customRate || rateLimit;
     const redeems = customRedeem || maxRedemptions;
-    setTimeout(() => {
+    const payload = {
+      label: label.trim() || `${tier}-key-${Date.now().toString(36).slice(-4)}`,
+      tier,
+      format,
+      expiryDays,
+      rateLimit: rate,
+      threads: 1,
+      maxRedemptions: redeems && Number(redeems) > 0 ? Number(redeems) : null,
+    };
+    const apiResult = await generateKeyViaAPI(payload);
+    if (apiResult) {
+      setKeys(prev => [apiResult, ...prev]);
+      setGeneratedKey(apiResult);
+    } else {
       const id = uuidv4();
       const now = Date.now();
       const newKey = {
         id, key: generateKeyValue(format, tier),
-        label: label.trim() || `${tier}-key-${Date.now().toString(36).slice(-4)}`,
-        tier, rateLimit: rate, threads: 1,
+        label: payload.label, tier, rateLimit: rate, threads: 1,
         createdAt: now,
         expiresAt: expiryDays > 0 ? now + expiryDays * 86400000 : null,
         revoked: false, usageCount: 0,
-        maxRedemptions: redeems && Number(redeems) > 0 ? Number(redeems) : null,
-        redemptionCount: 0,
+        maxRedemptions: payload.maxRedemptions, redemptionCount: 0,
       };
       setKeys(prev => [newKey, ...prev]);
       setGeneratedKey(newKey);
-      setShowKeyVal(false);
-      setLabel("");
-      setLoading(false);
-      notify("Key generated successfully");
-    }, 700);
+    }
+    setShowKeyVal(false);
+    setLabel("");
+    setLoading(false);
+    notify("Key generated successfully");
   }
 
   function handleValidate() {
@@ -298,7 +342,7 @@ export default function KeyVault() {
                 style={{ padding: "8px 18px", borderRadius: 8, border: `1px solid ${D.border}`, background: "transparent", color: D.muted, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
                 Cancel
               </button>
-              <button className="kv-btn" onClick={() => { setKeys(prev => prev.filter(k => k.id !== confirmDel)); setConfirmDel(null); if (expandedKey === confirmDel) setExpandedKey(null); notify("Key deleted", "warn"); }}
+              <button className="kv-btn" onClick={() => { deleteKeyViaAPI(confirmDel); setKeys(prev => prev.filter(k => k.id !== confirmDel)); setConfirmDel(null); if (expandedKey === confirmDel) setExpandedKey(null); notify("Key deleted", "warn"); }}
                 style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: D.red, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
                 Delete key
               </button>
@@ -614,6 +658,10 @@ export default function KeyVault() {
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
                 <div style={{ width: 5, height: 20, background: D.accent, borderRadius: 3 }} />
                 <span style={{ fontSize: 12, fontWeight: 600, color: D.text, letterSpacing: "0.05em" }}>Manage Keys</span>
+                <button className="kv-btn" onClick={() => { fetchKeysFromAPI().then(apiKeys => { if (apiKeys) { setKeys(apiKeys); notify("Keys refreshed from server"); } else { notify("Failed to refresh", "error"); } }); }}
+                  style={{ marginLeft: "auto", fontSize: 11, padding: "5px 12px", borderRadius: 6, border: `1px solid ${D.border}`, background: "transparent", color: D.accentText, cursor: "pointer", fontFamily: "inherit" }}>
+                  ↻ Refresh
+                </button>
               </div>
 
               {/* Toolbar */}
@@ -733,13 +781,13 @@ export default function KeyVault() {
                             {/* Actions */}
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                               {!k.revoked && (
-                                <button className="kv-btn" onClick={() => { setKeys(prev => prev.map(kk => kk.id === k.id ? { ...kk, revoked: true, revokedAt: Date.now() } : kk)); notify("Key revoked", "warn"); }}
+                                <button className="kv-btn" onClick={() => { revokeKeyViaAPI(k.id, true); setKeys(prev => prev.map(kk => kk.id === k.id ? { ...kk, revoked: true, revokedAt: Date.now() } : kk)); notify("Key revoked", "warn"); }}
                                   style={{ fontSize: 11, padding: "7px 16px", borderRadius: 8, border: `1px solid ${D.amber}40`, background: D.amberDim, color: D.amberText, cursor: "pointer", fontFamily: "inherit" }}>
                                   Revoke
                                 </button>
                               )}
                               {k.revoked && (
-                                <button className="kv-btn" onClick={() => { setKeys(prev => prev.map(kk => kk.id === k.id ? { ...kk, revoked: false, revokedAt: undefined } : kk)); notify("Key restored"); }}
+                                <button className="kv-btn" onClick={() => { revokeKeyViaAPI(k.id, false); setKeys(prev => prev.map(kk => kk.id === k.id ? { ...kk, revoked: false, revokedAt: undefined } : kk)); notify("Key restored"); }}
                                   style={{ fontSize: 11, padding: "7px 16px", borderRadius: 8, border: `1px solid ${D.green}40`, background: D.greenDim, color: D.greenText, cursor: "pointer", fontFamily: "inherit" }}>
                                   Restore
                                 </button>
