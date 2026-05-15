@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { label, tier, format, expiryDays, rateLimit } = req.body as CreateKeyRequest
+    const { label, tier, format, expiryDays, rateLimit, threads } = req.body as CreateKeyRequest
 
     if (!tier || !format) return res.status(400).json({ error: 'tier and format are required' })
 
@@ -29,6 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       label: label || `${tier}-key`,
       tier,
       rateLimit: rateLimit || '1000',
+      threads: threads || 1,
       createdAt: now,
       expiresAt,
       revoked: false,
