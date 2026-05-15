@@ -32,11 +32,11 @@ function generateKeyValue(format: string, tier: string): string {
 function buildSeed(): ApiKey[] {
   const now = Date.now();
   return [
-    { id: uuidv4(), key: "vip_ab3fxyz1_mn7pqrs2", label: "mobile-app-prod", tier: "vip", rateLimit: "5000", threads: 16, createdAt: now - 86400000 * 10, expiresAt: now + 86400000 * 20, revoked: false, usageCount: 1482 },
-    { id: uuidv4(), key: hexRand(32), label: "analytics-service", tier: "vip", rateLimit: "unlimited", threads: 32, createdAt: now - 86400000 * 30, expiresAt: now + 86400000 * 335, revoked: false, usageCount: 58210 },
-    { id: uuidv4(), key: uuidv4(), label: "sandbox-testing", tier: "free", rateLimit: "1000", threads: 2, createdAt: now - 86400000 * 5, expiresAt: now + 86400000 * 2, revoked: false, usageCount: 44 },
-    { id: uuidv4(), key: alphaRand(24), label: "legacy-webhook", tier: "free", rateLimit: "1000", threads: 4, createdAt: now - 86400000 * 90, expiresAt: now - 86400000 * 1, revoked: false, usageCount: 9320 },
-    { id: uuidv4(), key: "vip_" + alphaRand(8) + "_" + alphaRand(8), label: "ci-pipeline", tier: "vip", rateLimit: "unlimited", threads: 8, createdAt: now - 86400000 * 60, expiresAt: null, revoked: true, revokedAt: now - 86400000 * 3, usageCount: 301 },
+    { id: uuidv4(), key: "vip_ab3fxyz1_mn7pqrs2", label: "mobile-app-prod", tier: "vip", rateLimit: "5000", threads: 16, createdAt: now - 86400000 * 10, expiresAt: now + 86400000 * 20, revoked: false, usageCount: 1482, maxRedemptions: 100, redemptionCount: 67 },
+    { id: uuidv4(), key: hexRand(32), label: "analytics-service", tier: "vip", rateLimit: "unlimited", threads: 32, createdAt: now - 86400000 * 30, expiresAt: now + 86400000 * 335, revoked: false, usageCount: 58210, maxRedemptions: null, redemptionCount: 0 },
+    { id: uuidv4(), key: uuidv4(), label: "sandbox-testing", tier: "free", rateLimit: "1000", threads: 2, createdAt: now - 86400000 * 5, expiresAt: now + 86400000 * 2, revoked: false, usageCount: 44, maxRedemptions: 10, redemptionCount: 10 },
+    { id: uuidv4(), key: alphaRand(24), label: "legacy-webhook", tier: "free", rateLimit: "1000", threads: 4, createdAt: now - 86400000 * 90, expiresAt: now - 86400000 * 1, revoked: false, usageCount: 9320, maxRedemptions: 50, redemptionCount: 50 },
+    { id: uuidv4(), key: "vip_" + alphaRand(8) + "_" + alphaRand(8), label: "ci-pipeline", tier: "vip", rateLimit: "unlimited", threads: 8, createdAt: now - 86400000 * 60, expiresAt: null, revoked: true, revokedAt: now - 86400000 * 3, usageCount: 301, maxRedemptions: null, redemptionCount: 0 },
   ];
 }
 
@@ -223,6 +223,7 @@ export default function App() {
   const [rateLimit, setRateLimit] = useState("1000");
   const [comboLimitCustom, setComboLimitCustom] = useState("");
   const [label, setLabel] = useState("");
+  const [maxRedemptions, setMaxRedemptions] = useState<string>("");
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const T = THEMES[theme];
@@ -251,6 +252,8 @@ export default function App() {
         tier, rateLimit, threads: 1, createdAt: now,
         expiresAt: expiryDays > 0 ? now + expiryDays * 86400000 : null,
         revoked: false, usageCount: 0,
+        maxRedemptions: maxRedemptions !== "" && Number(maxRedemptions) > 0 ? Number(maxRedemptions) : null,
+        redemptionCount: 0,
       };
       setKeys(prev => [newKey, ...prev]);
       setGeneratedKey(newKey);
@@ -467,6 +470,34 @@ export default function App() {
                 <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. my-app-production" />
               </div>
 
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 10, color: T.muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>Max Redemptions (optional)</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {["1", "5", "10", "50", "100"].map(v => (
+                    <button key={v} type="button"
+                      onClick={() => setMaxRedemptions(maxRedemptions === v ? "" : v)}
+                      style={{ flex: 1, padding: "9px 0", borderRadius: 7, border: `0.5px solid ${maxRedemptions === v ? T.accent : T.border}`, background: maxRedemptions === v ? T.accentBg : "var(--inp)", color: maxRedemptions === v ? T.accentText : T.muted, fontSize: 12, fontFamily: "inherit", cursor: "pointer", fontWeight: maxRedemptions === v ? 600 : 400, transition: "all 0.15s" }}>
+                      {v}
+                    </button>
+                  ))}
+                  <button type="button"
+                    onClick={() => setMaxRedemptions("")}
+                    style={{ flex: 1, padding: "9px 0", borderRadius: 7, border: `0.5px solid ${maxRedemptions === "" ? T.accent : T.border}`, background: maxRedemptions === "" ? T.accentBg : "var(--inp)", color: maxRedemptions === "" ? T.accentText : T.muted, fontSize: 12, fontFamily: "inherit", cursor: "pointer", fontWeight: maxRedemptions === "" ? 600 : 400, transition: "all 0.15s" }}>
+                    ∞
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  value={maxRedemptions}
+                  onChange={e => setMaxRedemptions(e.target.value)}
+                  placeholder="Custom limit (e.g. 25)... leave empty for unlimited"
+                  style={{ marginTop: 6, width: "100%", background: "var(--inp)", border: `0.5px solid ${maxRedemptions ? T.accent : T.border}`, borderRadius: 8, color: "var(--text)", fontFamily: "inherit", fontSize: 13, padding: "9px 12px", outline: "none", boxSizing: "border-box" as const, transition: "border-color 0.15s" }}
+                  onFocus={e => e.target.style.borderColor = T.accent}
+                  onBlur={e => e.target.style.borderColor = maxRedemptions ? T.accent : "var(--bord)"}
+                />
+              </div>
+
               {/* Preview strip */}
               <div style={{ background: T.bg, border: `0.5px solid ${T.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: 18, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                 <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
@@ -475,6 +506,7 @@ export default function App() {
                     ["Format", <span key="f" style={{ fontSize: 11, color: T.accentText }}>{format.toUpperCase()}</span>],
                     ["Expires", <span key="e" style={{ fontSize: 11, color: T.muted }}>{expiryDays > 0 ? `in ${expiryDays}d` : "Never"}</span>],
                     ["Combo", <span key="r" style={{ fontSize: 11, color: T.muted }}>{rateLimit === "unlimited" ? "∞" : `${Number(rateLimit).toLocaleString()}/d`}</span>],
+                    ["Redeems", <span key="rd" style={{ fontSize: 11, color: T.muted }}>{maxRedemptions ? `0 / ${Number(maxRedemptions).toLocaleString()}` : "∞"}</span>],
                   ] as [string, React.ReactNode][]).map(([k, v]) => (
                     <div key={k} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: 10, color: T.muted }}>{k}:</span>{v}
@@ -510,6 +542,7 @@ export default function App() {
                     <span>Label: <b style={{ color: T.text }}>{generatedKey.label}</b></span>
                     <span>Combo: <b style={{ color: T.text }}>{generatedKey.rateLimit === "unlimited" ? "∞" : `${Number(generatedKey.rateLimit).toLocaleString()}/d`}</b></span>
                     <span>Expires: <b style={{ color: T.text }}>{fmtDate(generatedKey.expiresAt)}</b></span>
+                    <span>Redeems: <b style={{ color: T.text }}>{generatedKey.maxRedemptions ? `0 / ${generatedKey.maxRedemptions.toLocaleString()}` : "∞ Unlimited"}</b></span>
                   </div>
                 </div>
               )}
@@ -545,7 +578,7 @@ export default function App() {
                   </div>
                   {validateResult.valid && validateResult.key && (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                      {[["Label", validateResult.key.label], ["Tier", validateResult.key.tier?.toUpperCase()], ["Combo Limit", validateResult.key.rateLimit === "unlimited" ? "Unlimited" : `${Number(validateResult.key.rateLimit).toLocaleString()}/day`], ["Threads", String((validateResult.key as ApiKey).threads ?? 1)], ["Usage Count", validateResult.key.usageCount.toLocaleString()], ["Created", fmtDate(validateResult.key.createdAt)], ["Expires", fmtDate(validateResult.key.expiresAt)]].map(([k, v]) => (
+                      {[["Label", validateResult.key.label], ["Tier", validateResult.key.tier?.toUpperCase()], ["Combo Limit", validateResult.key.rateLimit === "unlimited" ? "Unlimited" : `${Number(validateResult.key.rateLimit).toLocaleString()}/day`], ["Threads", String((validateResult.key as ApiKey).threads ?? 1)], ["Usage Count", validateResult.key.usageCount.toLocaleString()], ["Redemptions", validateResult.key.maxRedemptions ? `${validateResult.key.redemptionCount} / ${validateResult.key.maxRedemptions}` : "∞ Unlimited"], ["Created", fmtDate(validateResult.key.createdAt)], ["Expires", fmtDate(validateResult.key.expiresAt)]].map(([k, v]) => (
                         <div key={k}>
                           <div style={{ fontSize: 10, color: T.greenText + "99", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>{k}</div>
                           <div style={{ fontSize: 12, color: T.text }}>{v}</div>
@@ -620,6 +653,9 @@ export default function App() {
                           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                             <div style={{ textAlign: "right" }}>
                               <div style={{ fontSize: 11, color: T.muted }}>{k.usageCount.toLocaleString()} uses</div>
+                              <div style={{ fontSize: 10, color: k.maxRedemptions && k.redemptionCount >= k.maxRedemptions ? T.redText : T.hint }}>
+                                {k.maxRedemptions ? `${k.redemptionCount} / ${k.maxRedemptions} redeems` : "∞ redeems"}
+                              </div>
                               <div style={{ fontSize: 10, color: T.hint }}>{fmtDate(k.expiresAt)}</div>
                             </div>
                             <span style={{ fontSize: 12, color: T.hint, transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>▾</span>
@@ -630,7 +666,7 @@ export default function App() {
                         {isExpanded && (
                           <div style={{ borderTop: `0.5px solid ${T.border}`, padding: "14px 14px", background: T.surface, animation: "slideDown 0.15s ease" }}>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-                              {[["Created", fmtDate(k.createdAt)], ["Expires", fmtDate(k.expiresAt)], ["Combo Limit", k.rateLimit === "unlimited" ? "Unlimited" : `${Number(k.rateLimit).toLocaleString()}/day`], ["Usage Count", k.usageCount.toLocaleString()], ["ID", k.id.slice(0, 18) + "…"], ...(k.revoked ? [["Revoked At", fmtDate(k.revokedAt ?? null)]] : [])].map(([lbl, val]) => (
+                              {[["Created", fmtDate(k.createdAt)], ["Expires", fmtDate(k.expiresAt)], ["Combo Limit", k.rateLimit === "unlimited" ? "Unlimited" : `${Number(k.rateLimit).toLocaleString()}/day`], ["Redemptions", k.maxRedemptions ? `${k.redemptionCount} / ${k.maxRedemptions}` : "∞ Unlimited"], ["Usage Count", k.usageCount.toLocaleString()], ["ID", k.id.slice(0, 18) + "…"], ...(k.revoked ? [["Revoked At", fmtDate(k.revokedAt ?? null)]] : [])].map(([lbl, val]) => (
                                 <div key={lbl}>
                                   <div style={{ fontSize: 10, color: T.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>{lbl}</div>
                                   <div style={{ fontSize: 12, color: T.text, wordBreak: "break-all" }}>{val}</div>
