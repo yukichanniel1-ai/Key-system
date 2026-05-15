@@ -1,13 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getAllKeys, updateKey } from '../../../lib/store'
+import { isAuthorized } from '../../../lib/auth'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const secret = req.headers['x-admin-secret']
-  if (process.env.ADMIN_SECRET && secret !== process.env.ADMIN_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
+  if (!isAuthorized(req)) return res.status(401).json({ error: 'Unauthorized' })
 
   const { id } = req.body
   if (!id) return res.status(400).json({ error: 'id is required' })

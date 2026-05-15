@@ -3,15 +3,12 @@ import { v4 as uuidv4 } from 'uuid'
 import { generateKeyValue } from '../../../lib/keygen'
 import { saveKey } from '../../../lib/store'
 import { ApiKey, CreateKeyRequest } from '../../../lib/types'
+import { isAuthorized } from '../../../lib/auth'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  // Optional admin secret protection
-  const secret = req.headers['x-admin-secret']
-  if (process.env.ADMIN_SECRET && secret !== process.env.ADMIN_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
+  if (!isAuthorized(req)) return res.status(401).json({ error: 'Unauthorized' })
 
   try {
     const { label, tier, format, expiryDays, rateLimit, threads, maxRedemptions } = req.body as CreateKeyRequest
