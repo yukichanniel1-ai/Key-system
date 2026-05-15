@@ -21,7 +21,7 @@ function generateKeyValue(format: string, tier: string): string {
     case "hex": return hexRand(32);
     case "alphanum": return alphaRand(24);
     case "prefix": {
-      const pfx = { free: "free", pro: "pro", enterprise: "ent", admin: "adm" }[tier];
+      const pfx = { free: "free", vip: "vip" }[tier] ?? "key";
       return `${pfx}_${alphaRand(8)}_${alphaRand(8)}`;
     }
     default: return uuidv4();
@@ -29,13 +29,16 @@ function generateKeyValue(format: string, tier: string): string {
 }
 
 // ─── INITIAL SEED DATA ────────────────────────────────────────────────────────
-const SEED: ApiKey[] = [
-  { id: uuidv4(), key: "pro_ab3fxyz1_mn7pqrs2", label: "mobile-app-prod", tier: "pro", rateLimit: "10000", createdAt: Date.now() - 86400000 * 10, expiresAt: Date.now() + 86400000 * 20, revoked: false, usageCount: 1482 },
-  { id: uuidv4(), key: hexRand(32), label: "analytics-service", tier: "enterprise", rateLimit: "unlimited", createdAt: Date.now() - 86400000 * 30, expiresAt: Date.now() + 86400000 * 335, revoked: false, usageCount: 58210 },
-  { id: uuidv4(), key: uuidv4(), label: "sandbox-testing", tier: "free", rateLimit: "100", createdAt: Date.now() - 86400000 * 5, expiresAt: Date.now() + 86400000 * 2, revoked: false, usageCount: 44 },
-  { id: uuidv4(), key: alphaRand(24), label: "legacy-webhook", tier: "pro", rateLimit: "1000", createdAt: Date.now() - 86400000 * 90, expiresAt: Date.now() - 86400000 * 1, revoked: false, usageCount: 9320 },
-  { id: uuidv4(), key: "adm_" + alphaRand(8) + "_" + alphaRand(8), label: "ci-pipeline", tier: "admin", rateLimit: "unlimited", createdAt: Date.now() - 86400000 * 60, expiresAt: null, revoked: true, revokedAt: Date.now() - 86400000 * 3, usageCount: 301 },
-];
+function buildSeed(): ApiKey[] {
+  const now = Date.now();
+  return [
+    { id: uuidv4(), key: "vip_ab3fxyz1_mn7pqrs2", label: "mobile-app-prod", tier: "vip", rateLimit: "5000", threads: 16, createdAt: now - 86400000 * 10, expiresAt: now + 86400000 * 20, revoked: false, usageCount: 1482 },
+    { id: uuidv4(), key: hexRand(32), label: "analytics-service", tier: "vip", rateLimit: "unlimited", threads: 32, createdAt: now - 86400000 * 30, expiresAt: now + 86400000 * 335, revoked: false, usageCount: 58210 },
+    { id: uuidv4(), key: uuidv4(), label: "sandbox-testing", tier: "free", rateLimit: "1000", threads: 2, createdAt: now - 86400000 * 5, expiresAt: now + 86400000 * 2, revoked: false, usageCount: 44 },
+    { id: uuidv4(), key: alphaRand(24), label: "legacy-webhook", tier: "free", rateLimit: "1000", threads: 4, createdAt: now - 86400000 * 90, expiresAt: now - 86400000 * 1, revoked: false, usageCount: 9320 },
+    { id: uuidv4(), key: "vip_" + alphaRand(8) + "_" + alphaRand(8), label: "ci-pipeline", tier: "vip", rateLimit: "unlimited", threads: 8, createdAt: now - 86400000 * 60, expiresAt: null, revoked: true, revokedAt: now - 86400000 * 3, usageCount: 301 },
+  ];
+}
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const THEMES = {
@@ -102,12 +105,10 @@ const THEMES = {
 // ─── TIER CONFIG ──────────────────────────────────────────────────────────────
 const TIER_CFG = {
   free: { label: "FREE", color: (t: Theme) => ({ bg: t.blueBg, text: t.blueText, border: t.blue + "40" }) },
-  pro: { label: "PRO", color: (t: Theme) => ({ bg: t.greenBg, text: t.greenText, border: t.green + "40" }) },
-  enterprise: { label: "ENTERPRISE", color: (t: Theme) => ({ bg: t.amberBg, text: t.amberText, border: t.amber + "40" }) },
-  admin: { label: "ADMIN", color: (t: Theme) => ({ bg: t.redBg, text: t.redText, border: t.red + "40" }) },
+  vip: { label: "VIP", color: (t: Theme) => ({ bg: t.amberBg, text: t.amberText, border: t.amber + "40" }) },
 };
 
-const RATE_OPTS = ["100", "500", "1000", "5000", "10000", "unlimited"];
+const COMBO_LIMIT_PRESETS = ["1000", "5000", "unlimited"];
 const EXPIRY_OPTS = [{ label: "7 days", days: 7 }, { label: "30 days", days: 30 }, { label: "90 days", days: 90 }, { label: "1 year", days: 365 }, { label: "Never", days: 0 }];
 
 // ─── COMPONENT PROP TYPES ─────────────────────────────────────────────────────
@@ -187,12 +188,17 @@ export default function App() {
   const [theme, setTheme] = useState<keyof typeof THEMES>("dark");
   const [tab, setTab] = useState("generate");
   const [keys, setKeys] = useState<ApiKey[]>(() => {
-    if (typeof window === "undefined") return SEED;
+    if (typeof window === "undefined") return buildSeed();
     try {
       const stored = localStorage.getItem("keyvault:keys");
-      if (stored) return JSON.parse(stored) as ApiKey[];
+      if (stored !== null) return JSON.parse(stored) as ApiKey[];
+      // First visit: seed and mark as seeded
+      const seed = buildSeed();
+      localStorage.setItem("keyvault:keys", JSON.stringify(seed));
+      localStorage.setItem("keyvault:seeded", "1");
+      return seed;
     } catch {}
-    return SEED;
+    return buildSeed();
   });
   useEffect(() => {
     try { localStorage.setItem("keyvault:keys", JSON.stringify(keys)); } catch {}
@@ -209,10 +215,13 @@ export default function App() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [validateInput, setValidateInput] = useState("");
   const [validateResult, setValidateResult] = useState<{ valid: boolean; reason?: string; key?: ApiKey } | null>(null);
-  const [tier, setTier] = useState<KeyTier>("pro");
+  const [tier, setTier] = useState<KeyTier>("free");
   const [format, setFormat] = useState<KeyFormat>("prefix");
+  const [editingThreads, setEditingThreads] = useState<string | null>(null);
+  const [editThreadsCustom, setEditThreadsCustom] = useState("");
   const [expiryDays, setExpiryDays] = useState(30);
   const [rateLimit, setRateLimit] = useState("1000");
+  const [comboLimitCustom, setComboLimitCustom] = useState("");
   const [label, setLabel] = useState("");
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
@@ -239,7 +248,7 @@ export default function App() {
       const now = Date.now();
       const newKey: ApiKey = {
         id, key: keyValue, label: label.trim() || `${tier}-key-${Date.now().toString(36).slice(-4)}`,
-        tier, rateLimit, createdAt: now,
+        tier, rateLimit, threads: 1, createdAt: now,
         expiresAt: expiryDays > 0 ? now + expiryDays * 86400000 : null,
         revoked: false, usageCount: 0,
       };
@@ -413,18 +422,44 @@ export default function App() {
                 <span style={{ color: T.accent }}>✦</span> Generate New Key
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
                 {[
-                  { lbl: "Tier", el: <Select value={tier} onChange={e => setTier(e.target.value as KeyTier)} options={[{ value: "free", label: "Free" }, { value: "pro", label: "Pro" }, { value: "enterprise", label: "Enterprise" }, { value: "admin", label: "Admin" }]} /> },
+                  { lbl: "Tier", el: <Select value={tier} onChange={e => setTier(e.target.value as KeyTier)} options={[{ value: "free", label: "Free" }, { value: "vip", label: "VIP" }]} /> },
                   { lbl: "Format", el: <Select value={format} onChange={e => setFormat(e.target.value as KeyFormat)} options={[{ value: "uuid", label: "UUID v4" }, { value: "hex", label: "HEX-32" }, { value: "alphanum", label: "ALPHANUM-24" }, { value: "prefix", label: "PREFIX-KEY" }]} /> },
                   { lbl: "Expiry", el: <Select value={expiryDays} onChange={e => setExpiryDays(Number(e.target.value))} options={EXPIRY_OPTS.map(o => ({ value: o.days, label: o.label }))} /> },
-                  { lbl: "Rate Limit", el: <Select value={rateLimit} onChange={e => setRateLimit(e.target.value)} options={RATE_OPTS.map(v => ({ value: v, label: v === "unlimited" ? "Unlimited" : `${Number(v).toLocaleString()} req/day` }))} /> },
                 ].map(({ lbl, el }) => (
                   <div key={lbl}>
                     <div style={{ fontSize: 10, color: T.muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>{lbl}</div>
                     {el}
                   </div>
                 ))}
+              </div>
+
+
+              {/* Combo Limit — full width */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 10, color: T.muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>Combo Limit</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {COMBO_LIMIT_PRESETS.map(v => (
+                      <button key={v} type="button"
+                        onClick={() => { setRateLimit(v); setComboLimitCustom(""); }}
+                        style={{ flex: 1, padding: "9px 0", borderRadius: 7, border: `0.5px solid ${rateLimit === v && !comboLimitCustom ? T.accent : T.border}`, background: rateLimit === v && !comboLimitCustom ? T.accentBg : "var(--inp)", color: rateLimit === v && !comboLimitCustom ? T.accentText : T.muted, fontSize: 12, fontFamily: "inherit", cursor: "pointer", fontWeight: rateLimit === v && !comboLimitCustom ? 600 : 400, transition: "all 0.15s" }}>
+                        {v === "unlimited" ? "∞ Unlimited" : `${Number(v).toLocaleString()} lines`}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="number"
+                    min={1}
+                    value={comboLimitCustom}
+                    onChange={e => { setComboLimitCustom(e.target.value); if (e.target.value) setRateLimit(e.target.value); }}
+                    placeholder="Custom combo limit (e.g. 2500)..."
+                    style={{ width: "100%", background: "var(--inp)", border: `0.5px solid ${comboLimitCustom ? T.accent : T.border}`, borderRadius: 8, color: "var(--text)", fontFamily: "inherit", fontSize: 13, padding: "9px 12px", outline: "none", boxSizing: "border-box" as const, transition: "border-color 0.15s" }}
+                    onFocus={e => e.target.style.borderColor = T.accent}
+                    onBlur={e => e.target.style.borderColor = comboLimitCustom ? T.accent : "var(--bord)"}
+                  />
+                </div>
               </div>
 
               <div style={{ marginBottom: 18 }}>
@@ -439,7 +474,7 @@ export default function App() {
                     ["Tier", <KeyStatusBadge key="t" k={{ tier, revoked: false, expiresAt: null }} T={T} />],
                     ["Format", <span key="f" style={{ fontSize: 11, color: T.accentText }}>{format.toUpperCase()}</span>],
                     ["Expires", <span key="e" style={{ fontSize: 11, color: T.muted }}>{expiryDays > 0 ? `in ${expiryDays}d` : "Never"}</span>],
-                    ["Rate", <span key="r" style={{ fontSize: 11, color: T.muted }}>{rateLimit === "unlimited" ? "∞" : `${Number(rateLimit).toLocaleString()}/d`}</span>],
+                    ["Combo", <span key="r" style={{ fontSize: 11, color: T.muted }}>{rateLimit === "unlimited" ? "∞" : `${Number(rateLimit).toLocaleString()}/d`}</span>],
                   ] as [string, React.ReactNode][]).map(([k, v]) => (
                     <div key={k} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: 10, color: T.muted }}>{k}:</span>{v}
@@ -473,7 +508,7 @@ export default function App() {
                   </div>
                   <div style={{ display: "flex", gap: 16, fontSize: 11, color: T.muted, flexWrap: "wrap" }}>
                     <span>Label: <b style={{ color: T.text }}>{generatedKey.label}</b></span>
-                    <span>Rate: <b style={{ color: T.text }}>{generatedKey.rateLimit === "unlimited" ? "∞" : `${Number(generatedKey.rateLimit).toLocaleString()}/d`}</b></span>
+                    <span>Combo: <b style={{ color: T.text }}>{generatedKey.rateLimit === "unlimited" ? "∞" : `${Number(generatedKey.rateLimit).toLocaleString()}/d`}</b></span>
                     <span>Expires: <b style={{ color: T.text }}>{fmtDate(generatedKey.expiresAt)}</b></span>
                   </div>
                 </div>
@@ -510,7 +545,7 @@ export default function App() {
                   </div>
                   {validateResult.valid && validateResult.key && (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                      {[["Label", validateResult.key.label], ["Tier", validateResult.key.tier?.toUpperCase()], ["Rate Limit", validateResult.key.rateLimit === "unlimited" ? "Unlimited" : `${Number(validateResult.key.rateLimit).toLocaleString()}/day`], ["Usage Count", validateResult.key.usageCount.toLocaleString()], ["Created", fmtDate(validateResult.key.createdAt)], ["Expires", fmtDate(validateResult.key.expiresAt)]].map(([k, v]) => (
+                      {[["Label", validateResult.key.label], ["Tier", validateResult.key.tier?.toUpperCase()], ["Combo Limit", validateResult.key.rateLimit === "unlimited" ? "Unlimited" : `${Number(validateResult.key.rateLimit).toLocaleString()}/day`], ["Threads", String((validateResult.key as ApiKey).threads ?? 1)], ["Usage Count", validateResult.key.usageCount.toLocaleString()], ["Created", fmtDate(validateResult.key.createdAt)], ["Expires", fmtDate(validateResult.key.expiresAt)]].map(([k, v]) => (
                         <div key={k}>
                           <div style={{ fontSize: 10, color: T.greenText + "99", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>{k}</div>
                           <div style={{ fontSize: 12, color: T.text }}>{v}</div>
@@ -546,7 +581,7 @@ export default function App() {
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search label or key..." />
                 </div>
-                <Select value={filterTier} onChange={e => setFilterTier(e.target.value)} style={{ width: 120 }} options={[{ value: "all", label: "All tiers" }, { value: "free", label: "Free" }, { value: "pro", label: "Pro" }, { value: "enterprise", label: "Enterprise" }, { value: "admin", label: "Admin" }]} />
+                <Select value={filterTier} onChange={e => setFilterTier(e.target.value)} style={{ width: 120 }} options={[{ value: "all", label: "All tiers" }, { value: "free", label: "Free" }, { value: "vip", label: "VIP" }]} />
                 <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ width: 120 }} options={[{ value: "all", label: "All status" }, { value: "active", label: "Active" }, { value: "expired", label: "Expired" }, { value: "revoked", label: "Revoked" }]} />
                 <Select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ width: 120 }} options={[{ value: "newest", label: "Newest" }, { value: "oldest", label: "Oldest" }, { value: "label", label: "Label A-Z" }, { value: "usage", label: "Most used" }]} />
               </div>
@@ -595,12 +630,53 @@ export default function App() {
                         {isExpanded && (
                           <div style={{ borderTop: `0.5px solid ${T.border}`, padding: "14px 14px", background: T.surface, animation: "slideDown 0.15s ease" }}>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-                              {[["Created", fmtDate(k.createdAt)], ["Expires", fmtDate(k.expiresAt)], ["Rate Limit", k.rateLimit === "unlimited" ? "Unlimited" : `${Number(k.rateLimit).toLocaleString()}/day`], ["Usage Count", k.usageCount.toLocaleString()], ["ID", k.id.slice(0, 18) + "…"], ...(k.revoked ? [["Revoked At", fmtDate(k.revokedAt ?? null)]] : [])].map(([lbl, val]) => (
+                              {[["Created", fmtDate(k.createdAt)], ["Expires", fmtDate(k.expiresAt)], ["Combo Limit", k.rateLimit === "unlimited" ? "Unlimited" : `${Number(k.rateLimit).toLocaleString()}/day`], ["Usage Count", k.usageCount.toLocaleString()], ["ID", k.id.slice(0, 18) + "…"], ...(k.revoked ? [["Revoked At", fmtDate(k.revokedAt ?? null)]] : [])].map(([lbl, val]) => (
                                 <div key={lbl}>
                                   <div style={{ fontSize: 10, color: T.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>{lbl}</div>
                                   <div style={{ fontSize: 12, color: T.text, wordBreak: "break-all" }}>{val}</div>
                                 </div>
                               ))}
+
+                            {/* Threads inline editor */}
+                            <div style={{ gridColumn: "1 / -1" }}>
+                              <div style={{ fontSize: 10, color: T.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Threads</div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                <div style={{ display: "flex", gap: 5 }}>
+                                  {[1, 2, 4, 8, 16, 32].map(v => {
+                                    const cur = k.threads ?? 1;
+                                    const isActive = cur === v && !(editingThreads === k.id && editThreadsCustom && ![1,2,4,8,16,32].includes(Number(editThreadsCustom)));
+                                    return (
+                                      <button key={v} type="button"
+                                        onClick={() => {
+                                          setKeys(prev => prev.map(kk => kk.id === k.id ? { ...kk, threads: v } : kk));
+                                          setEditingThreads(k.id);
+                                          setEditThreadsCustom("");
+                                          notify(`Threads set to ${v}`);
+                                        }}
+                                        style={{ flex: 1, padding: "7px 0", borderRadius: 7, border: `0.5px solid ${isActive ? T.accent : T.border}`, background: isActive ? T.accentBg : "var(--inp)", color: isActive ? T.accentText : T.muted, fontSize: 11, fontFamily: "inherit", cursor: "pointer", fontWeight: isActive ? 600 : 400, transition: "all 0.15s" }}>
+                                        {v}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={512}
+                                  value={editingThreads === k.id ? editThreadsCustom : (![1,2,4,8,16,32].includes(k.threads ?? 1) ? String(k.threads ?? 1) : "")}
+                                  onChange={e => {
+                                    setEditingThreads(k.id);
+                                    setEditThreadsCustom(e.target.value);
+                                    const v = Number(e.target.value);
+                                    if (v > 0) setKeys(prev => prev.map(kk => kk.id === k.id ? { ...kk, threads: v } : kk));
+                                  }}
+                                  placeholder={`Custom (current: ${k.threads ?? 1})`}
+                                  style={{ width: "100%", background: "var(--inp)", border: `0.5px solid ${editingThreads === k.id && editThreadsCustom ? T.accent : T.border}`, borderRadius: 8, color: "var(--text)", fontFamily: "inherit", fontSize: 12, padding: "7px 10px", outline: "none", boxSizing: "border-box" as const, transition: "border-color 0.15s" }}
+                                  onFocus={e => { e.target.style.borderColor = T.accent; setEditingThreads(k.id); }}
+                                  onBlur={e => { e.target.style.borderColor = "var(--bord)"; if (editThreadsCustom) notify(`Threads set to ${editThreadsCustom}`); }}
+                                />
+                              </div>
+                            </div>
                             </div>
 
                             {/* Full key display */}
