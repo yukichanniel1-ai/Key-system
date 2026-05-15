@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { ApiKey, KeyTier, KeyFormat } from "../lib/types";
 
 // ─── CRYPTO HELPERS ───────────────────────────────────────────────────────────
@@ -186,7 +186,18 @@ function Select({ value, onChange, options, style = {} }: SelectProps) {
 export default function App() {
   const [theme, setTheme] = useState<keyof typeof THEMES>("dark");
   const [tab, setTab] = useState("generate");
-  const [keys, setKeys] = useState<ApiKey[]>(SEED);
+  const [keys, setKeys] = useState<ApiKey[]>(() => {
+    if (typeof window === "undefined") return SEED;
+    try {
+      const stored = localStorage.getItem("keyvault:keys");
+      if (stored) return JSON.parse(stored) as ApiKey[];
+    } catch {}
+    return SEED;
+  });
+  useEffect(() => {
+    try { localStorage.setItem("keyvault:keys", JSON.stringify(keys)); } catch {}
+  }, [keys]);
+
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState<{ msg: string; type: string } | null>(null);
   const [generatedKey, setGeneratedKey] = useState<ApiKey | null>(null);
@@ -630,7 +641,7 @@ export default function App() {
 
         {/* Footer */}
         <div style={{ marginTop: 28, textAlign: "center", fontSize: 11, color: T.hint, letterSpacing: "0.05em" }}>
-          KeyVault · {keys.length} keys stored in session
+          KeyVault · {keys.length} keys stored locally
         </div>
       </div>
     </div>
