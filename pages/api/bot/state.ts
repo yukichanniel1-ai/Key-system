@@ -19,10 +19,8 @@ async function getKV() {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Auth check
-  const secret = req.headers['x-admin-secret']
-  if (process.env.ADMIN_SECRET && secret !== process.env.ADMIN_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
+  const { isAuthorized } = await import('../../../lib/auth')
+  if (!isAuthorized(req)) return res.status(401).json({ error: 'Unauthorized' })
 
   const kv = await getKV()
   if (!kv) {
