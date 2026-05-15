@@ -14,7 +14,7 @@ export function generateKeyValue(format: KeyFormat, tier: KeyTier): string {
       const arr = crypto.getRandomValues(new Uint8Array(24))
       return Array.from(arr).map(b => chars[b % chars.length]).join('')
     case 'prefix':
-      const pfx = { free: 'free', pro: 'pro', enterprise: 'ent', admin: 'adm' }[tier]
+      const pfx = { free: 'free', vip: 'vip' }[tier]
       const seg1 = Array.from(crypto.getRandomValues(new Uint8Array(8)))
         .map(b => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('')
       const seg2 = Array.from(crypto.getRandomValues(new Uint8Array(8)))
