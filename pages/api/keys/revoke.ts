@@ -7,17 +7,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (!isAuthorized(req)) return res.status(401).json({ error: 'Unauthorized' })
 
-  const { id } = req.body
+  const { id, revoke } = req.body
   if (!id) return res.status(400).json({ error: 'id is required' })
+
+  const shouldRevoke = revoke !== false
 
   try {
     const all = await getAllKeys()
     const found = all.find(k => k.id === id)
     if (!found) return res.status(404).json({ error: 'Key not found' })
-    if (found.revoked) return res.status(400).json({ error: 'Key already revoked' })
 
-    found.revoked = true
-    found.revokedAt = Date.now()
+    if (shouldRevoke) {
+      if (found.revoked) return res.status(400).json({ error: 'Key already revoked' })
+      found.revoked = true
+      found.revokedAt = Date.now()
+    } else {
+      found.revoked = false
+      delete (found as any).revokedAt
+    }
     await updateKey(found)
 
     return res.status(200).json({ success: true, key: found })
