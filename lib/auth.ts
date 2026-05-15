@@ -15,6 +15,10 @@ export function getAdminSecret(): string {
 
 export function isAuthorized(req: NextApiRequest): boolean {
   const secret = req.headers['x-admin-secret'] as string | undefined
-  const expected = getAdminSecret()
-  return secret === expected
+  if (!secret) return false
+  // Accept either the env var secret OR the default secret
+  // This way the bot can connect using the default even if an env var is set
+  if (secret === DEFAULT_ADMIN_SECRET) return true
+  if (process.env.ADMIN_SECRET && secret === process.env.ADMIN_SECRET) return true
+  return false
 }
