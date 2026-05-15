@@ -13,6 +13,8 @@ export interface ApiKey {
   revoked: boolean
   revokedAt?: number
   usageCount: number
+  maxRedemptions: number | null   // null = unlimited
+  redemptionCount: number
 }
 
 export interface CreateKeyRequest {
@@ -22,6 +24,7 @@ export interface CreateKeyRequest {
   expiryDays: number
   rateLimit: string
   threads: number
+  maxRedemptions: number | null
 }
 
 export interface ValidateKeyResponse {
