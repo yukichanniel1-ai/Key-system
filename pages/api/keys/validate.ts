@@ -15,9 +15,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     if (!found) return res.status(200).json({ valid: false, reason: 'Key not found' })
     if (found.revoked) return res.status(200).json({ valid: false, reason: 'Key has been revoked' })
     if (isKeyExpired(found.expiresAt)) return res.status(200).json({ valid: false, reason: 'Key has expired' })
+    if (found.maxRedemptions !== null && found.redemptionCount >= found.maxRedemptions) {
+      return res.status(200).json({ valid: false, reason: 'Redemption limit reached' })
+    }
 
-    // Increment usage count
+    // Increment usage count and redemption count
     found.usageCount = (found.usageCount || 0) + 1
+    found.redemptionCount = (found.redemptionCount || 0) + 1
     await updateKey(found)
 
     const { key: _k, ...safeKey } = found

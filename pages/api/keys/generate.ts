@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { label, tier, format, expiryDays, rateLimit, threads } = req.body as CreateKeyRequest
+    const { label, tier, format, expiryDays, rateLimit, threads, maxRedemptions } = req.body as CreateKeyRequest
 
     if (!tier || !format) return res.status(400).json({ error: 'tier and format are required' })
 
@@ -34,6 +34,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       expiresAt,
       revoked: false,
       usageCount: 0,
+      maxRedemptions: maxRedemptions ?? null,
+      redemptionCount: 0,
     }
 
     await saveKey(apiKey)
