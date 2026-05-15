@@ -1,4 +1,4 @@
-export type KeyTier = 'free' | 'pro' | 'enterprise' | 'admin'
+export type KeyTier = 'free' | 'vip'
 export type KeyFormat = 'uuid' | 'hex' | 'alphanum' | 'prefix'
 
 export interface ApiKey {
@@ -7,6 +7,7 @@ export interface ApiKey {
   label: string
   tier: KeyTier
   rateLimit: string
+  threads: number
   createdAt: number
   expiresAt: number | null
   revoked: boolean
@@ -20,6 +21,7 @@ export interface CreateKeyRequest {
   format: KeyFormat
   expiryDays: number
   rateLimit: string
+  threads: number
 }
 
 export interface ValidateKeyResponse {
