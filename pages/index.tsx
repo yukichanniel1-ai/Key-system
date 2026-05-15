@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
+import type { ApiKey, KeyTier, KeyFormat } from "../lib/types";
 
 // ─── CRYPTO HELPERS ───────────────────────────────────────────────────────────
 function uuidv4() {
@@ -7,14 +8,14 @@ function uuidv4() {
     return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
   });
 }
-function hexRand(n) {
+function hexRand(n: number): string {
   return Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
 }
-function alphaRand(n) {
+function alphaRand(n: number): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   return Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 }
-function generateKeyValue(format, tier) {
+function generateKeyValue(format: string, tier: string): string {
   switch (format) {
     case "uuid": return uuidv4();
     case "hex": return hexRand(32);
@@ -28,7 +29,7 @@ function generateKeyValue(format, tier) {
 }
 
 // ─── INITIAL SEED DATA ────────────────────────────────────────────────────────
-const SEED = [
+const SEED: ApiKey[] = [
   { id: uuidv4(), key: "pro_ab3fxyz1_mn7pqrs2", label: "mobile-app-prod", tier: "pro", rateLimit: "10000", createdAt: Date.now() - 86400000 * 10, expiresAt: Date.now() + 86400000 * 20, revoked: false, usageCount: 1482 },
   { id: uuidv4(), key: hexRand(32), label: "analytics-service", tier: "enterprise", rateLimit: "unlimited", createdAt: Date.now() - 86400000 * 30, expiresAt: Date.now() + 86400000 * 335, revoked: false, usageCount: 58210 },
   { id: uuidv4(), key: uuidv4(), label: "sandbox-testing", tier: "free", rateLimit: "100", createdAt: Date.now() - 86400000 * 5, expiresAt: Date.now() + 86400000 * 2, revoked: false, usageCount: 44 },
@@ -100,17 +101,28 @@ const THEMES = {
 
 // ─── TIER CONFIG ──────────────────────────────────────────────────────────────
 const TIER_CFG = {
-  free: { label: "FREE", color: (t) => ({ bg: t.blueBg, text: t.blueText, border: t.blue + "40" }) },
-  pro: { label: "PRO", color: (t) => ({ bg: t.greenBg, text: t.greenText, border: t.green + "40" }) },
-  enterprise: { label: "ENTERPRISE", color: (t) => ({ bg: t.amberBg, text: t.amberText, border: t.amber + "40" }) },
-  admin: { label: "ADMIN", color: (t) => ({ bg: t.redBg, text: t.redText, border: t.red + "40" }) },
+  free: { label: "FREE", color: (t: Theme) => ({ bg: t.blueBg, text: t.blueText, border: t.blue + "40" }) },
+  pro: { label: "PRO", color: (t: Theme) => ({ bg: t.greenBg, text: t.greenText, border: t.green + "40" }) },
+  enterprise: { label: "ENTERPRISE", color: (t: Theme) => ({ bg: t.amberBg, text: t.amberText, border: t.amber + "40" }) },
+  admin: { label: "ADMIN", color: (t: Theme) => ({ bg: t.redBg, text: t.redText, border: t.red + "40" }) },
 };
 
 const RATE_OPTS = ["100", "500", "1000", "5000", "10000", "unlimited"];
 const EXPIRY_OPTS = [{ label: "7 days", days: 7 }, { label: "30 days", days: 30 }, { label: "90 days", days: 90 }, { label: "1 year", days: 365 }, { label: "Never", days: 0 }];
 
+// ─── COMPONENT PROP TYPES ─────────────────────────────────────────────────────
+type Theme = typeof THEMES.dark;
+
+interface BadgeProps { label: string; bg: string; text: string; border: string; }
+interface KeyStatusBadgeProps { k: Pick<ApiKey, "revoked" | "expiresAt" | "tier">; T: Theme; }
+interface CopyBtnProps { value: string; T: Theme; }
+interface StatCardProps { label: string; value: number; color?: string; T: Theme; }
+interface InputProps { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string; style?: React.CSSProperties; }
+interface SelectOption { value: string | number; label: string; }
+interface SelectProps { value: string | number; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; options: SelectOption[]; style?: React.CSSProperties; }
+
 // ─── COMPONENTS ───────────────────────────────────────────────────────────────
-function Badge({ label, bg, text, border }) {
+function Badge({ label, bg, text, border }: BadgeProps) {
   return (
     <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", padding: "2px 8px", borderRadius: 20, background: bg, color: text, border: `0.5px solid ${border}`, fontFamily: "var(--font-mono, monospace)", whiteSpace: "nowrap" }}>
       {label}
@@ -118,7 +130,7 @@ function Badge({ label, bg, text, border }) {
   );
 }
 
-function KeyStatusBadge({ k, T }) {
+function KeyStatusBadge({ k, T }: KeyStatusBadgeProps) {
   const now = Date.now();
   if (k.revoked) return <Badge label="REVOKED" bg={T.redBg} text={T.redText} border={T.red + "40"} />;
   if (k.expiresAt && now > k.expiresAt) return <Badge label="EXPIRED" bg={T.amberBg} text={T.amberText} border={T.amber + "40"} />;
@@ -127,7 +139,7 @@ function KeyStatusBadge({ k, T }) {
   return <Badge label={cfg.label} bg={c.bg} text={c.text} border={c.border} />;
 }
 
-function CopyBtn({ value, T }) {
+function CopyBtn({ value, T }: CopyBtnProps) {
   const [state, setState] = useState("idle");
   function copy() {
     navigator.clipboard.writeText(value).then(() => { setState("ok"); setTimeout(() => setState("idle"), 2000); });
@@ -139,7 +151,7 @@ function CopyBtn({ value, T }) {
   );
 }
 
-function StatCard({ label, value, color, T }) {
+function StatCard({ label, value, color, T }: StatCardProps) {
   return (
     <div style={{ background: T.surface, border: `0.5px solid ${T.border}`, borderRadius: 12, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 4 }}>
       <div style={{ fontSize: 28, fontWeight: 700, color: color || T.text, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{value}</div>
@@ -148,7 +160,7 @@ function StatCard({ label, value, color, T }) {
   );
 }
 
-function Input({ value, onChange, placeholder, style = {} }) {
+function Input({ value, onChange, placeholder, style = {} }: InputProps) {
   return (
     <input value={value} onChange={onChange} placeholder={placeholder}
       style={{ width: "100%", background: "var(--inp)", border: "0.5px solid var(--bord)", borderRadius: 8, color: "var(--text)", fontFamily: "inherit", fontSize: 13, padding: "9px 12px", outline: "none", transition: "border-color 0.15s", boxSizing: "border-box", ...style }}
@@ -158,7 +170,7 @@ function Input({ value, onChange, placeholder, style = {} }) {
   );
 }
 
-function Select({ value, onChange, options, style = {} }) {
+function Select({ value, onChange, options, style = {} }: SelectProps) {
   return (
     <select value={value} onChange={onChange}
       style={{ width: "100%", background: "var(--inp)", border: "0.5px solid var(--bord)", borderRadius: 8, color: "var(--text)", fontFamily: "inherit", fontSize: 13, padding: "9px 12px", outline: "none", transition: "border-color 0.15s", appearance: "none", cursor: "pointer", boxSizing: "border-box", ...style }}
@@ -172,30 +184,30 @@ function Select({ value, onChange, options, style = {} }) {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState<keyof typeof THEMES>("dark");
   const [tab, setTab] = useState("generate");
-  const [keys, setKeys] = useState(SEED);
+  const [keys, setKeys] = useState<ApiKey[]>(SEED);
   const [loading, setLoading] = useState(false);
-  const [notification, setNotification] = useState(null);
-  const [generatedKey, setGeneratedKey] = useState(null);
+  const [notification, setNotification] = useState<{ msg: string; type: string } | null>(null);
+  const [generatedKey, setGeneratedKey] = useState<ApiKey | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [search, setSearch] = useState("");
   const [filterTier, setFilterTier] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
-  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [validateInput, setValidateInput] = useState("");
-  const [validateResult, setValidateResult] = useState(null);
-  const [tier, setTier] = useState("pro");
-  const [format, setFormat] = useState("prefix");
+  const [validateResult, setValidateResult] = useState<{ valid: boolean; reason?: string; key?: ApiKey } | null>(null);
+  const [tier, setTier] = useState<KeyTier>("pro");
+  const [format, setFormat] = useState<KeyFormat>("prefix");
   const [expiryDays, setExpiryDays] = useState(30);
   const [rateLimit, setRateLimit] = useState("1000");
   const [label, setLabel] = useState("");
-  const [expandedKey, setExpandedKey] = useState(null);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const T = THEMES[theme];
 
-  const notify = useCallback((msg, type = "success") => {
+  const notify = useCallback((msg: string, type = "success") => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3000);
   }, []);
@@ -214,7 +226,7 @@ export default function App() {
       const id = uuidv4();
       const keyValue = generateKeyValue(format, tier);
       const now = Date.now();
-      const newKey = {
+      const newKey: ApiKey = {
         id, key: keyValue, label: label.trim() || `${tier}-key-${Date.now().toString(36).slice(-4)}`,
         tier, rateLimit, createdAt: now,
         expiresAt: expiryDays > 0 ? now + expiryDays * 86400000 : null,
@@ -245,19 +257,19 @@ export default function App() {
     }, 400);
   }
 
-  function handleRevoke(id) {
+  function handleRevoke(id: string) {
     setKeys(prev => prev.map(k => k.id === id ? { ...k, revoked: true, revokedAt: Date.now() } : k));
     notify("Key revoked");
   }
 
-  function handleDelete(id) {
+  function handleDelete(id: string) {
     setKeys(prev => prev.filter(k => k.id !== id));
     setConfirmDelete(null);
     if (expandedKey === id) setExpandedKey(null);
     notify("Key deleted", "warning");
   }
 
-  function handleUnrevoke(id) {
+  function handleUnrevoke(id: string) {
     setKeys(prev => prev.map(k => k.id === id ? { ...k, revoked: false, revokedAt: undefined } : k));
     notify("Key restored");
   }
@@ -280,13 +292,13 @@ export default function App() {
     return 0;
   });
 
-  function daysUntil(ts) {
+  function daysUntil(ts: number | null): number | null {
     if (!ts) return null;
     const d = Math.ceil((ts - now) / 86400000);
     return d;
   }
 
-  function fmtDate(ts) {
+  function fmtDate(ts: number | null): string {
     if (!ts) return "Never";
     return new Date(ts).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   }
@@ -392,8 +404,8 @@ export default function App() {
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
                 {[
-                  { lbl: "Tier", el: <Select value={tier} onChange={e => setTier(e.target.value)} options={[{ value: "free", label: "Free" }, { value: "pro", label: "Pro" }, { value: "enterprise", label: "Enterprise" }, { value: "admin", label: "Admin" }]} /> },
-                  { lbl: "Format", el: <Select value={format} onChange={e => setFormat(e.target.value)} options={[{ value: "uuid", label: "UUID v4" }, { value: "hex", label: "HEX-32" }, { value: "alphanum", label: "ALPHANUM-24" }, { value: "prefix", label: "PREFIX-KEY" }]} /> },
+                  { lbl: "Tier", el: <Select value={tier} onChange={e => setTier(e.target.value as KeyTier)} options={[{ value: "free", label: "Free" }, { value: "pro", label: "Pro" }, { value: "enterprise", label: "Enterprise" }, { value: "admin", label: "Admin" }]} /> },
+                  { lbl: "Format", el: <Select value={format} onChange={e => setFormat(e.target.value as KeyFormat)} options={[{ value: "uuid", label: "UUID v4" }, { value: "hex", label: "HEX-32" }, { value: "alphanum", label: "ALPHANUM-24" }, { value: "prefix", label: "PREFIX-KEY" }]} /> },
                   { lbl: "Expiry", el: <Select value={expiryDays} onChange={e => setExpiryDays(Number(e.target.value))} options={EXPIRY_OPTS.map(o => ({ value: o.days, label: o.label }))} /> },
                   { lbl: "Rate Limit", el: <Select value={rateLimit} onChange={e => setRateLimit(e.target.value)} options={RATE_OPTS.map(v => ({ value: v, label: v === "unlimited" ? "Unlimited" : `${Number(v).toLocaleString()} req/day` }))} /> },
                 ].map(({ lbl, el }) => (
@@ -412,12 +424,12 @@ export default function App() {
               {/* Preview strip */}
               <div style={{ background: T.bg, border: `0.5px solid ${T.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: 18, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                 <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                  {[
+                  {([
                     ["Tier", <KeyStatusBadge key="t" k={{ tier, revoked: false, expiresAt: null }} T={T} />],
                     ["Format", <span key="f" style={{ fontSize: 11, color: T.accentText }}>{format.toUpperCase()}</span>],
                     ["Expires", <span key="e" style={{ fontSize: 11, color: T.muted }}>{expiryDays > 0 ? `in ${expiryDays}d` : "Never"}</span>],
                     ["Rate", <span key="r" style={{ fontSize: 11, color: T.muted }}>{rateLimit === "unlimited" ? "∞" : `${Number(rateLimit).toLocaleString()}/d`}</span>],
-                  ].map(([k, v]) => (
+                  ] as [string, React.ReactNode][]).map(([k, v]) => (
                     <div key={k} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: 10, color: T.muted }}>{k}:</span>{v}
                     </div>
@@ -572,7 +584,7 @@ export default function App() {
                         {isExpanded && (
                           <div style={{ borderTop: `0.5px solid ${T.border}`, padding: "14px 14px", background: T.surface, animation: "slideDown 0.15s ease" }}>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-                              {[["Created", fmtDate(k.createdAt)], ["Expires", fmtDate(k.expiresAt)], ["Rate Limit", k.rateLimit === "unlimited" ? "Unlimited" : `${Number(k.rateLimit).toLocaleString()}/day`], ["Usage Count", k.usageCount.toLocaleString()], ["ID", k.id.slice(0, 18) + "…"], ...(k.revoked ? [["Revoked At", fmtDate(k.revokedAt)]] : [])].map(([lbl, val]) => (
+                              {[["Created", fmtDate(k.createdAt)], ["Expires", fmtDate(k.expiresAt)], ["Rate Limit", k.rateLimit === "unlimited" ? "Unlimited" : `${Number(k.rateLimit).toLocaleString()}/day`], ["Usage Count", k.usageCount.toLocaleString()], ["ID", k.id.slice(0, 18) + "…"], ...(k.revoked ? [["Revoked At", fmtDate(k.revokedAt ?? null)]] : [])].map(([lbl, val]) => (
                                 <div key={lbl}>
                                   <div style={{ fontSize: 10, color: T.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>{lbl}</div>
                                   <div style={{ fontSize: 12, color: T.text, wordBreak: "break-all" }}>{val}</div>
